@@ -1,0 +1,16 @@
+pip install pybaseball
+from pybaseball import statcast
+import pandas as pd
+data = statcast('2023-03-01','2023-06-02')
+data = data[['player_name','woba_value','estimated_woba_using_speedangle']]
+data = data.dropna()
+import matplotlib.pyplot as plt
+league_avg_woba= data["woba_value"].mean()
+league_avg_xwoba= data["estimated_woba_using_speedangle"].mean()
+plt.scatter(data["woba_value"],data["estimated_woba_using_speedangle"])
+plt.plot([0,1],[0,1], transform=plt.gca().transAxes, linestyle='--', color='green')
+plt.plot([league_avg_woba], [league_avg_xwoba], marker='o', markersize=10, color="red")
+plt.xlabel("wOBA")
+plt.ylabel("xwOBA")
+plt.title("2023 wOBA vs xwOBA")
+plt.show()
