@@ -1,0 +1,201 @@
+pip install pybaseball
+
+import numpy as np
+import pandas as pd
+
+from pybaseball import statcast
+split24=statcast(start_dt="2024-03-28", end_dt="2024-05-17")
+
+Pitches2024=split24['pitch_type'].value_counts().reset_index().rename(columns={"index": "value", 0: "count"})
+total_pitches1 = Pitches2024['count'].sum()
+Pitches2024['pitch_percentage'] = (Pitches2024['count'] / total_pitches1) * 100
+Pitches2024
+
+split23=statcast(start_dt="2023-03-30",end_dt="2023-10-01")
+
+Pitches2023=split23['pitch_type'].value_counts().reset_index().rename(columns={"index": "value", 0: "count"})
+total_pitches = Pitches2023['count'].sum()
+Pitches2023['pitch_percentage'] = (Pitches2023['count'] / total_pitches) * 100
+Pitches2023
+
+split22=statcast(start_dt="2022-04-07",end_dt="2022-10-05")
+Pitches2022=split22['pitch_type'].value_counts().reset_index().rename(columns={"index": "value", 0: "count"})
+total_pitches2 = Pitches2022['count'].sum()
+Pitches2022['pitch_percentage'] = (Pitches2022['count'] / total_pitches2) * 100
+Pitches2022
+
+combined_pitches = pd.concat([Pitches2022, Pitches2023, Pitches2024], ignore_index=True)
+combined_pitches
+
+combined_pitches = pd.concat([Pitches2022, Pitches2023, Pitches2024], axis=1)
+combined_pitches.columns = ['value2022', 'count2022', 'pitch_percentage2022', 'value2023', 'count2023', 'pitch_percentage2023', 'value2024', 'count2024', 'pitch_percentage2024']
+combined_pitches
+
+
+import matplotlib.pyplot as plt
+
+fs_pitches_2022 = combined_pitches[combined_pitches['value2022'] == 'FS']['pitch_percentage2022'].values[0]
+fs_pitches_2023 = combined_pitches[combined_pitches['value2023'] == 'FS']['pitch_percentage2023'].values[0]
+fs_pitches_2024 = combined_pitches[combined_pitches['value2024'] == 'FS']['pitch_percentage2024'].values[0]
+
+years = ['2022', '2023', '2024']
+percentages = [fs_pitches_2022, fs_pitches_2023, fs_pitches_2024]
+
+plt.bar(years, percentages)
+plt.xlabel('Year')
+plt.ylabel('% of Pitches')
+plt.title('Change in FS Pitch Type Usage from 2022-2024')
+plt.show()
+
+
+Pitches2024=split24['pitch_type'].value_counts()
+
+splitter = split24.groupby(['player_name','pitch_type'])
+display(splitter)
+
+split24['pitch_type'].unique()
+
+pitcher_pitch_usage = (
+    split24.groupby(['player_name', 'pitch_type'])
+    .size()
+    .to_frame(name='count')
+    .reset_index()
+    .merge(
+        split24.groupby('player_name')['pitch_type'].count().to_frame(name='total_pitches'),
+        on='player_name',
+    )
+)
+pitcher_pitch_usage['usage_percentage'] = (pitcher_pitch_usage['count'] / pitcher_pitch_usage['total_pitches']) * 100
+pitcher_pitch_usage
+
+
+strike_pitches = split24[split24['description'].isin(['swinging_strike', 'called_strike', 'foul'])]
+pitcher_strike_usage = (
+    strike_pitches.groupby(['player_name', 'pitch_type'])
+    .size()
+    .to_frame(name='count')
+    .reset_index()
+    .merge(
+        strike_pitches.groupby('player_name')['pitch_type'].count().to_frame(name='total_pitches'),
+        on='player_name',
+    )
+)
+pitcher_strike_usage['usage_percentage'] = (pitcher_strike_usage['count'] / pitcher_strike_usage['total_pitches']) * 100
+pitcher_strike_usage.pivot_table(values='usage_percentage', index='player_name', columns='pitch_type')
+
+
+strike_pitches = split24[split24['description'].isin(['swinging_strike', 'called_strike', 'foul'])]
+pitcher_strike_usage = (
+    strike_pitches.groupby(['player_name', 'pitch_type'])
+    .size()
+    .to_frame(name='count')
+    .reset_index()
+    .merge(
+        strike_pitches.groupby('player_name')['pitch_type'].count().to_frame(name='total_pitches'),
+        on='player_name',
+    )
+)
+pitcher_strike_usage['CSW_percentage'] = (pitcher_strike_usage['count'] / pitcher_strike_usage['total_pitches']) * 100
+pitcher_strike_usage_filtered = pitcher_strike_usage[pitcher_strike_usage['pitch_type'] == 'FS']
+pitcher_strike_usage_filtered = pitcher_strike_usage_filtered[pitcher_strike_usage_filtered['CSW_percentage'] > 0]
+pitcher_strike_usage_filtered.pivot_table(values='CSW_percentage', index='player_name', columns='pitch_type')
+
+
+split24.groupby(['pitch_type']).get_group('FS')
+
+split=split24.groupby('pitch_type').get_group('FS')
+
+Psplit = split.groupby(['player_name','pitch_type'])[['release_speed', 'release_pos_x', 'release_pos_z', 'pfx_x', 'pfx_z', 'plate_x', 'plate_z', 'hc_x', 'hc_y','launch_speed', 'launch_angle', 'effective_speed', 'release_spin_rate', 'release_extension']].mean()
+
+merged_df = pd.merge(pitcher_pitch_usage, pitcher_strike_usage, on=['player_name', 'pitch_type'])
+merged_df = pd.merge(merged_df, Psplit, on=['player_name', 'pitch_type'])
+merged_df
+
+import scipy.stats as stats
+
+correlation, pvalue = stats.pearsonr(merged_df['CSW_percentage'], merged_df['usage_percentage'])
+
+print("Correlation coefficient:", correlation)
+print("P-value:", pvalue)
+
+
+import seaborn as sns
+
+top_25_pitchers = merged_df.nlargest(25, 'usage_percentage')
+
+sns.scatterplot(
+    data=top_25_pitchers,
+    x="usage_percentage",
+    y="CSW_percentage",
+    hue="player_name",
+    s=50,
+)
+
+plt.grid(True)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
+
+plt.xlabel("Usage Percentage", labelpad=10)
+plt.ylabel("CSW Percentage", labelpad=10)
+plt.title("Usage Percentage vs. CSW Percentage for Top 25 Pitchers", y=1)
+
+plt.show()
+
+
+median_csw = merged_df['CSW_percentage'].median()
+median_usage = merged_df['usage_percentage'].median()
+
+print(f"Median CSW percentage: {median_csw}")
+print(f"Median usage percentage: {median_usage}")
+
+
+merged_df['value_metric'] = (merged_df['CSW_percentage'] - median_csw) + (merged_df['usage_percentage'] - median_usage)
+
+merged_df = merged_df.sort_values(by='value_metric', ascending=False)
+
+merged_df.head(10)
+
+
+sns.scatterplot(
+    data=merged_df,
+    x="value_metric",
+    y="CSW_percentage",
+    hue="player_name",
+    s=50,
+)
+
+plt.grid(True)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
+
+plt.xlabel("Value Metric", labelpad=10)
+plt.ylabel("CSW Percentage", labelpad=10)
+plt.title("Value Metric vs. CSW Percentage", y=1)
+
+plt.show()
+
+
+from sklearn.model_selection import train_test_split
+
+X = merged_df[['usage_percentage']]
+y = merged_df['value_metric']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+from sklearn.linear_model import LinearRegression
+
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+print(f"Mean squared error: {mse}")
+print(f"R-squared score: {r2}")
+
+correlation, pvalue = stats.spearmanr(merged_df['value_metric'], merged_df['usage_percentage'])
+
+print("Spearman correlation coefficient:", correlation)
+print("P-value:", pvalue)
